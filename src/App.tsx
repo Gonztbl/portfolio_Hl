@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Heart, 
@@ -10,7 +10,9 @@ import {
   Coffee,
   Gamepad2,
   MessageCircle,
-  Mail
+  Mail,
+  Play,
+  Pause
 } from 'lucide-react';
 
 interface IconProps extends React.SVGProps<SVGSVGElement> {
@@ -316,8 +318,91 @@ const MarqueeSection = () => {
 };
 
 const PlaySection = () => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Game States
+  const [gameStarted, setGameStarted] = useState(false);
+  const [cards, setCards] = useState<{ id: number; emoji: string; isFlipped: boolean; isMatched: boolean }[]>([]);
+  const [selected, setSelected] = useState<number[]>([]);
+  const [moves, setMoves] = useState(0);
+  const [isWon, setIsWon] = useState(false);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch((err) => console.log("Lỗi phát nhạc:", err));
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const initGame = () => {
+    const emojis = ['🧸', '🧋', '🍵', '🌻', '🌸', '🎀'];
+    const shuffled = [...emojis, ...emojis]
+      .map((emoji, index) => ({ id: index, emoji, isFlipped: false, isMatched: false }))
+      .sort(() => Math.random() - 0.5);
+    setCards(shuffled);
+    setSelected([]);
+    setMoves(0);
+    setIsWon(false);
+    setGameStarted(true);
+  };
+
+  const handleCardClick = (idx: number) => {
+    if (selected.length === 2 || cards[idx].isFlipped || cards[idx].isMatched) return;
+
+    const newCards = [...cards];
+    newCards[idx].isFlipped = true;
+    setCards(newCards);
+
+    const newSelected = [...selected, idx];
+    setSelected(newSelected);
+
+    if (newSelected.length === 2) {
+      setMoves((prev) => prev + 1);
+      const [firstIdx, secondIdx] = newSelected;
+      if (cards[firstIdx].emoji === cards[secondIdx].emoji) {
+        // Match found
+        setTimeout(() => {
+          const matchedCards = cards.map((c, i) => {
+            if (i === firstIdx || i === secondIdx) {
+              return { ...c, isMatched: true };
+            }
+            return c;
+          });
+          setCards(matchedCards);
+          setSelected([]);
+          if (matchedCards.every((c) => c.isMatched)) {
+            setIsWon(true);
+          }
+        }, 300);
+      } else {
+        // Flip back
+        setTimeout(() => {
+          const resetCards = cards.map((c, i) => {
+            if (i === firstIdx || i === secondIdx) {
+              return { ...c, isFlipped: false };
+            }
+            return c;
+          });
+          setCards(resetCards);
+          setSelected([]);
+        }, 800);
+      }
+    }
+  };
+
   return (
     <section id="play" className="py-16 md:py-32 relative z-20 bg-white">
+      {/* Hidden audio element to play local mp3 */}
+      <audio 
+        ref={audioRef} 
+        src="/music/Bye-Ariana Grande.mp3-75700626.mp3" 
+        onEnded={() => setIsPlaying(false)}
+      />
+
       <div className="max-w-6xl mx-auto px-6">
         <div className="text-center mb-12 md:mb-20">
           <motion.div
@@ -341,24 +426,48 @@ const PlaySection = () => {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             whileHover={{ y: -10 }}
-            className="bg-lime-50 rounded-[2.5rem] p-8 border-4 border-lime-100 shadow-xl relative overflow-hidden group"
+            className="bg-lime-50 rounded-[2.5rem] p-8 border-4 border-lime-100 shadow-xl relative overflow-hidden group cursor-pointer"
+            onClick={togglePlay}
           >
             <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:scale-125 transition-transform duration-500">
               <Music size={100} color={theme.primary} />
             </div>
-            <div className="relative z-10">
+            <div className="relative z-10 flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm border-2 border-lime-200">
                 <Music size={28} style={{ color: theme.dark }} />
               </div>
-              <h3 className="text-2xl font-bold mb-3" style={{ color: theme.text }}>Now Playing</h3>
-              <p className="text-gray-600 font-medium mb-6">Những giai điệu Lofi chill chill để nạp lại năng lượng.</p>
+              <h3 className="text-2xl font-bold mb-1" style={{ color: theme.text }}>Now Playing</h3>
+              <p className="text-xs text-lime-700 font-bold mb-3 uppercase tracking-wider">Bye — Ariana Grande 🎵</p>
+              <p className="text-gray-600 font-medium mb-6 text-sm">Nhấn vào thẻ hoặc nút bên dưới để nghe bài hát yêu thích của Miu nha!</p>
               
               {/* Cute Vinyl Record Animation */}
-              <div className="w-32 h-32 mx-auto bg-gray-900 rounded-full border-4 border-gray-800 shadow-lg flex items-center justify-center animate-spin-slow">
+              <div 
+                className={`w-32 h-32 bg-gray-900 rounded-full border-4 border-gray-800 shadow-lg flex items-center justify-center relative ${isPlaying ? 'animate-spin-slow' : ''}`}
+              >
                 <div className="w-12 h-12 bg-lime-300 rounded-full border-2 border-white flex items-center justify-center">
                   <div className="w-3 h-3 bg-white rounded-full"></div>
                 </div>
+                {/* Visual Play/Pause overlay */}
+                <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
+                  {isPlaying ? (
+                    <Pause size={32} className="text-lime-300" />
+                  ) : (
+                    <Play size={32} className="text-lime-300 fill-lime-300" />
+                  )}
+                </div>
               </div>
+
+              {/* Controls button */}
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation(); // Tránh kích hoạt hai lần từ thẻ onClick
+                  togglePlay();
+                }}
+                className="mt-6 px-6 py-2.5 bg-lime-400 text-lime-900 rounded-full font-bold flex items-center gap-2 hover:bg-lime-500 hover:scale-105 active:scale-95 transition-all shadow-md"
+              >
+                {isPlaying ? <Pause size={16} /> : <Play size={16} className="fill-lime-900" />}
+                <span>{isPlaying ? 'Tạm Dừng' : 'Phát Nhạc'}</span>
+              </button>
             </div>
           </motion.div>
 
@@ -403,30 +512,81 @@ const PlaySection = () => {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.4 }}
-            whileHover={{ y: -10 }}
+            whileHover={!gameStarted ? { y: -10 } : {}}
             className="bg-pink-50 rounded-[2.5rem] p-8 border-4 border-pink-100 shadow-xl relative overflow-hidden group"
           >
             <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:scale-125 transition-transform duration-500">
               <Gamepad2 size={100} color="#f9a8d4" />
             </div>
-            <div className="relative z-10">
-              <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm border-2 border-pink-200">
-                <Gamepad2 size={28} className="text-pink-900" />
+
+            {gameStarted ? (
+              <div className="relative z-10 flex flex-col h-full justify-between">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="font-bold text-pink-900 text-sm">Lượt đi: {moves}</span>
+                  <button 
+                    onClick={() => setGameStarted(false)} 
+                    className="text-pink-600 hover:text-pink-900 font-black text-xs bg-white border border-pink-200 px-3 py-1 rounded-full transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
+                  >
+                    <X size={12} /> Thoát
+                  </button>
+                </div>
+
+                {isWon ? (
+                  <div className="text-center py-6 flex flex-col items-center justify-center">
+                    <span className="text-5xl mb-2 animate-bounce">🏆</span>
+                    <h4 className="text-xl font-bold text-pink-950 mb-1">Bạn Đã Thắng!</h4>
+                    <p className="text-sm text-pink-700 mb-6 leading-relaxed">Miu chúc mừng bạn đã tìm hết các cặp hình trùng nhau! 💖</p>
+                    <button 
+                      onClick={initGame} 
+                      className="px-6 py-2 bg-pink-400 hover:bg-pink-500 text-white rounded-full font-bold shadow-md hover:scale-105 active:scale-95 transition-all text-sm flex items-center gap-2 cursor-pointer"
+                    >
+                      🔄 Chơi Lại
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs text-pink-800 font-bold mb-4 text-center bg-pink-100/50 py-1 rounded-full">Tìm các cặp hình giống nhau nha! 🧸</p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {cards.map((card, idx) => (
+                        <motion.div
+                          key={card.id}
+                          onClick={() => handleCardClick(idx)}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className={`aspect-square flex items-center justify-center text-2xl bg-white border-2 rounded-xl cursor-pointer shadow-sm transition-all duration-300 ${
+                            card.isFlipped || card.isMatched 
+                              ? 'border-pink-300 bg-pink-100 rotate-y-180' 
+                              : 'border-pink-200 hover:border-pink-300'
+                          }`}
+                        >
+                          {card.isFlipped || card.isMatched ? card.emoji : '❓'}
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <h3 className="text-2xl font-bold mb-3" style={{ color: theme.text }}>Cozy Gamer</h3>
-              <p className="text-gray-600 font-medium mb-6">Giải trí nhẹ nhàng với Animal Crossing, Stardew Valley... 🌸</p>
-              
-              {/* Bouncing Game Controller */}
-              <div className="flex justify-center mt-8">
-                <motion.div 
-                  animate={{ rotate: [-10, 10, -10], scale: [1, 1.1, 1] }}
-                  transition={{ repeat: Infinity, duration: 4 }}
-                  className="px-6 py-3 bg-pink-200 rounded-full font-bold text-pink-900 border-2 border-white shadow-md flex items-center gap-2"
-                >
-                  <Star size={16} /> Press Start
-                </motion.div>
+            ) : (
+              <div className="relative z-10">
+                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm border-2 border-pink-200">
+                  <Gamepad2 size={28} className="text-pink-900" />
+                </div>
+                <h3 className="text-2xl font-bold mb-3" style={{ color: theme.text }}>Cozy Gamer</h3>
+                <p className="text-gray-600 font-medium mb-6">Giải trí nhẹ nhàng với Animal Crossing, Stardew Valley... 🌸</p>
+                
+                {/* Play Game Button */}
+                <div className="flex justify-center mt-8">
+                  <motion.button 
+                    onClick={initGame}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="px-6 py-3 bg-pink-200 hover:bg-pink-300 rounded-full font-bold text-pink-900 border-2 border-white shadow-md flex items-center gap-2 transition-colors cursor-pointer text-sm"
+                  >
+                    <Star size={16} className="fill-pink-900" /> Chơi Game Ngay 🎮
+                  </motion.button>
+                </div>
               </div>
-            </div>
+            )}
           </motion.div>
 
         </div>
